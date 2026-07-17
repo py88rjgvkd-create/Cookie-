@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>本格再現・クッキークリッカー</title>
+    <style>
+        body { text-align: center; font-family: 'Helvetica Neue', Arial, sans-serif; background: #2f2015; color: #fff; margin: 0; padding: 0; user-select: none; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #top-announcement { background: #1a100a; color: #ccc; padding: 10px; font-size: 16px; font-weight: bold; min-height: 20px; border-bottom: 3px solid #543824; position: relative; }
+        
+        #admin-trigger-btn { position: absolute; left: 10px; top: 7px; background: #a83232; color: white; border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+        #admin-trigger-btn:hover { background: #c73e3e; }
+
+        /* 💡 画面のど真ん中に出るでっかい文字（イベント通知）のスタイル */
+        #center-event-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.5); /* 最初は少し小さく */
+            background: rgba(19, 10, 5, 0.95);
+            color: #ffcc00; /* カッコいいゴールド色 */
+            padding: 30px 60px;
+            font-size: 32px;
+            font-weight: bold;
+            border: 4px solid #ffcc00;
+            border-radius: 15px;
+            box-shadow: 0 0 50px rgba(255, 204, 0, 0.6);
+            z-index: 2000;
+            display: none; /* 最初は隠しておく */
+            pointer-events: none; /* マウスの邪魔をしない */
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* アニメーションを滑らかに */
+        }
+        /* 文字が表示されたときの見た目 */
+        #center-event-message.show {
+            display: block;
+            transform: translate(-50%, -50%) scale(1); /* ポップに大きく広がる */
+        }
+
+        .game-container { display: flex; flex: 1; overflow: hidden; }
+        .left-panel { width: 35%; background: #422a1d; display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 4px solid #543824; position: relative; }
+        .center-panel { width: 30%; background: #22140c; display: flex; flex-direction: column; border-right: 4px solid #543824; }
+        .news-box { padding: 15px; background: #130a05; font-size: 14px; color: #a48670; border-bottom: 2px solid #3d2314; min-height: 40px; text-align: left; }
+        .log-box { flex: 1; padding: 15px; overflow-y: auto; text-align: left; font-size: 13px; color: #ccb09b; line-height: 1.6; }
+        .right-panel { width: 35%; background: #331e12; overflow-y: auto; display: flex; flex-direction: column; }
+        #cookie-container { width: 220px; height: 220px; position: relative; margin-bottom: 20px; }
+        #cookie { width: 100%; height: 100%; background: #c68a4c; border-radius: 50%; border: 8px solid #8a5a2b; font-size: 100px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 10px 0 #6e431d, 0 15px 20px rgba(0,0,0,0.5); transition: transform 0.05s; z-index: 10; }
+        #cookie:active { transform: scale(0.95); box-shadow: 0 4px 0 #6e431d; }
+        .cookie-particle { position: absolute; pointer-events: none; font-size: 24px; animation: floatUp 0.8s ease-out forwards; z-index: 100; }
+        @keyframes floatUp { 0% { transform: translate(0, 0) scale(1); opacity: 1; } 100% { transform: translate(var(--x), var(--y)) rotate(var(--r)); opacity: 0; } }
+        .status-title { font-size: 28px; font-weight: bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.6); margin-bottom: 5px; }
+        .status-cps { font-size: 16px; color: #bfa38f; margin-bottom: 20px; }
+        .shop-title { background: #1a100a; padding: 10px; font-size: 18px; font-weight: bold; border-bottom: 2px solid #543824; }
+        .item-btn { display: flex; align-items: center; width: 100%; padding: 12px; border: none; border-bottom: 2px solid #543824; background: #4e3222; color: #fff; text-align: left; cursor: pointer; transition: background 0.2s; }
+        .item-btn:hover:not(:disabled) { background: #61402d; }
+        .item-btn:disabled { background: #26170f; color: #666; cursor: not-allowed; }
+        .item-icon { font-size: 32px; margin-right: 15px; }
+        .item-info { flex: 1; }
+        .item-name { font-size: 16px; font-weight: bold; margin-bottom: 2px; }
+        .item-cost { font-size: 13px; color: #dfb387; }
+        .item-count { font-size: 20px; font-weight: bold; color: #a48670; padding-left: 10px; }
+        
+        .admin-panel { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 25px; border: 3px solid #8a5a2b; display: none; background: #22140c; color: #fff; border-radius: 12px; box-shadow: 0 0 30px rgba(0,0,0,0.8); z-index: 1000; width: 260px; }
+        .code-input { padding: 10px; font-size: 16px; border: 2px solid #543824; border-radius: 4px; width: 150px; background: #130a05; color: #fff; margin-bottom: 10px; text-align: center; }
+        .code-btn { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #543824; color: white; border: none; border-radius: 4px; font-weight: bold; }
+        .cheat-menu { display: none; text-align: left; margin-top: 15px; padding-top: 15px; border-top: 2px solid #543824; }
+        .cheat-menu label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 13px; color: #ccb09b; }
+        .cheat-menu input { width: 92%; padding: 6px; margin-bottom: 10px; border: 1px solid #543824; border-radius: 4px; background: #130a05; color: #fff; }
+        .apply-btn { width: 100%; padding: 10px; background: #a83232; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 15px; }
+    </style>
+</head>
+<body>
+    <!-- 💡 画面のど真ん中に文字を浮かすための箱 -->
+    <div id="center-event-message"></div>
+
+    <div id="top-announcement">
+        <button id="admin-trigger-btn">⚙️ 管理者パネル</button>
+        <span id="announcement-text">🍪 ニュース：クッキービジネスが今、幕を開ける。</span>
+    </div>
+    <div class="game-container">
+        <div class="left-panel">
+            <div class="status-title"><span id="cookies">0</span> クッキー</div>
+
+
+            <div class="status-cps">毎秒: <span id="cps">0</span> 枚</div>
+            <div id="cookie-container"><div id="cookie">🍪</div></div>
+        </div>
+        <div class="center-panel">
+            <div id="news-text" class="news-box">「クッキーを焼き始めました」</div>
+            <div id="log-box" class="log-box">⏱️ ログ：ゲームが開始されました。<br></div>
+        </div>
+        <div class="right-panel">
+            <div class="shop-title">建物ショップ</div>
+            <button id="btn-0" class="item-btn" disabled><div class="item-icon">🖲️</div><div class="item-info"><div class="item-name">カーソル</div><div class="item-cost">コスト: <span id="cost-0">15</span></div></div><div id="count-0" class="item-count">0</div></button>
+            <button id="btn-1" class="item-btn" disabled><div class="item-icon">👵</div><div class="item-info"><div class="item-name">おばあちゃん</div><div class="item-cost">コスト: <span id="cost-1">100</span></div></div><div id="count-1" class="item-count">0</div></button>
+            <button id="btn-2" class="item-btn" disabled><div class="item-icon">🌾</div><div class="item-info"><div class="item-name">農場</div><div class="item-cost">コスト: <span id="cost-2">1100</span></div></div><div id="count-2" class="item-count">0</div></button>
+            <button id="btn-3" class="item-btn" disabled><div class="item-icon">⛏️</div><div class="item-info"><div class="item-name">鉱山</div><div class="item-cost">コスト: <span id="cost-3">12000</span></div></div><div id="count-3" class="item-count">0</div></button>
+            <button id="btn-4" class="item-btn" disabled><div class="item-icon">🏭</div><div class="item-info"><div class="item-name">工場</div><div class="item-cost">コスト: <span id="cost-4">130000</span></div></div><div id="count-4" class="item-count">0</div></button>
+            <button id="btn-5" class="item-btn" disabled><div class="item-icon">🚀</div><div class="item-info"><div class="item-name">宇宙船</div><div class="item-cost">コスト: <span id="cost-5">1400000</span></div></div><div id="count-5" class="item-count">0</div></button>
+            <button id="btn-6" class="item-btn" disabled><div class="item-icon">⚗️</div><div class="item-info"><div class="item-name">錬金術ラボ</div><div class="item-cost">コスト: <span id="cost-6">20000000</span></div></div><div id="count-6" class="item-count">0</div></button>
+            <button id="btn-7" class="item-btn" disabled><div class="item-icon">⏳</div><div class="item-info"><div class="item-name">タイムマシン</div><div class="item-cost">コスト: <span id="cost-7">330000000</span></div></div><div id="count-7" class="item-count">0</div></button>
+        </div>
+    </div>
+    <div id="admin-panel" class="admin-panel">
+        <div id="input-area">
+            <h3>🔑 管理者コード</h3>
+            <input type="text" id="code-input" placeholder="コードを入力...">
+            <button id="code-btn" class="code-btn">実行</button>
+        </div>
+       <!-- ==========================================
+  1. HTMLの管理者パネル部分（デザイン維持・タイトル追加）
+=========================================== -->
+<div id="admin-panel" style="display:none;">
+    <!-- 一番上にタイトルを追加 -->
+    <h3 style="margin-top: 0; margin-bottom: 10px; font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Admin</h3>
+
+    <div id="input-area">
+        <input type="text" id="code-input" placeholder="コードを入力...">
+        <button type="button" id="code-btn">実行</button>
+    </div>
+
+    <!-- 暗号コード「0409」を入れたら表示されるメニュー（入力欄を正しく用意） -->
+    <div id="cheat-menu" style="display:none;">
+        <label>クッキーの数：</label>
+        <input type="number" id="set-cookies">
+        
+        <!-- 追加項目（元のデザインのままinputを配置） -->
+        <label>1タップの生産量（クリックパワー）：</label>
+        <input type="number" id="set-power">
+
+        <label>ゲームスピード（倍速）：</label>
+        <select id="set-speed" style="width: 100%; padding: 4px; margin-bottom: 8px; box-sizing: border-box;">
+            <option value="1">1倍速（通常）</option>
+            <option value="2">2倍速</option>
+            <option value="5">5倍速</option>
+            <option value="10">10倍速（爆速）</option>
+        </select>
+
+        <!-- 施設を直接追加する手入力欄 -->
+        <div style="border: 1px solid #ccc; padding: 8px; margin: 10px 0; border-radius: 4px;">
+            <p style="margin: 0 0 5px 0; font-size: 12px; font-weight: bold;">【施設を直接追加】</p>
+            <label style="font-size: 11px;">施設のID (0〜7)：</label>
+            <input type="number" id="add-item-id" min="0" max="7" placeholder="例: 0">
+            <label style="font-size: 11px;">増やす個数：</label>
+            <input type="number" id="add-item-count" min="1" placeholder="例: 10">
+            <button type="button" id="btn-add-item" style="margin-top: 5px; width: 100%; padding: 4px;">選択した施設を増やす</button>
+        </div>
+
+        <label>すべての施設の価格：</label>
+        <input type="number" id="set-all-cost">
+        
+        <button type="button" id="apply-btn">設定を反映</button>
+    </div>
+</div>
+
+<!-- ==========================================
+  2. JavaScript部分（ここから前半）
+=========================================== -->
+<script>
+        let items = [
+            { id: 0, baseCost: 15, cost: 15, cps: 0.1, count: 0 },
+            { id: 1, baseCost: 100, cost: 100, cps: 1, count: 0 },
+            { id: 2, baseCost: 1100, cost: 1100, cps: 8, count: 0 },
+            { id: 3, baseCost: 12000, cost: 12000, cps: 47, count: 0 },
+            { id: 4, baseCost: 130000, cost: 130000, cps: 260, count: 0 },
+            { id: 5, baseCost: 1400000, cost: 1400000, cps: 1400, count: 0 },
+            { id: 6, baseCost: 20000000, cost: 20000000, cps: 7800, count: 0 },
+            { id: 7, baseCost: 330000000, cost: 330000000, cps: 44000, count: 0 }
+        ];
+
+        let cookies = 0; let totalCookiesEarned = 0; let cps = 0; let clickPower = 1;
+        let achievements = [
+            { threshold: 1, text: "🏆 実績解除：最初の一歩（クッキーを1枚焼く）", done: false },
+            { threshold: 100, text: "🏆 実績解除：本格始動（クッキーを100枚焼く）", done: false },
+            { threshold: 10000, text: "🏆 実績解除：クッキー富豪（クッキーを1万枚焼く）", done: false },
+            { threshold: 1000000, text: "🏆 実績解除：お菓子天国（クッキーを100万枚焼く）", done: false }
+        ];
+
+        const elCookies = document.getElementById('cookies'); const elCps = document.getElementById('cps');
+        const elCookieBtn = document.getElementById('cookie'); const elAnnText = document.getElementById('announcement-text');
+        const elNews = document.getElementById('news-text'); const elLog = document.getElementById('log-box');
+        const elAdminPanel = document.getElementById('admin-panel'); const elAdminTriggerBtn = document.getElementById('admin-trigger-btn');
+        const elCodeInput = document.getElementById('code-input'); const elCodeBtn = document.getElementById('code-btn');
+        const elCheatMenu = document.getElementById('cheat-menu'); const elInputArea = document.getElementById('input-area'); const elApplyBtn = document.getElementById('apply-btn');
+        const inCookies = document.getElementById('set-cookies'); const inPower = document.getElementById('set-power'); const inAllCost = document.getElementById('set-all-cost');
+        const elCenterMsg = document.getElementById('center-event-message');
+
+        function saveGame() {
+            const saveData = {
+                cookies: cookies,
+                totalCookiesEarned: totalCookiesEarned,
+                cps: cps,
+                clickPower: clickPower,
+                items: items.map(item => ({ id: item.id, cost: item.cost, count: item.count })),
+                achievements: achievements.map(ach => ({ threshold: ach.threshold, done: ach.done }))
+            };
+            localStorage.setItem('cookie_clicker_save', JSON.stringify(saveData));
+        }
+
+        function loadGame() {
+            const savedRaw = localStorage.getItem('cookie_clicker_save');
+            if (!savedRaw) return;
+            try {
+                const data = JSON.parse(savedRaw);
+                cookies = data.cookies ?? 0;
+                totalCookiesEarned = data.totalCookiesEarned ?? 0;
+                cps = data.cps ?? 0;
+                clickPower = data.clickPower ?? 1;
+                if (data.items) {
+                    data.items.forEach(savedItem => {
+                        const originalItem = items.find(i => i.id === savedItem.id);
+                        if (originalItem) { originalItem.count = savedItem.count; originalItem.cost = savedItem.cost; }
+                    });
+                }
+                if (data.achievements) {
+                    data.achievements.forEach(savedAch => {
+                        const originalAch = achievements.find(a => a.threshold === savedAch.threshold);
+                        if (originalAch) { originalAch.done = savedAch.done; }
+                    });
+                }
+                if (elLog) elLog.innerHTML = "💾 前回のセーブデータをロードしました。<br>" + elLog.innerHTML;
+            } catch (e) { console.error("ロード失敗:", e); }
+        }
+
+        function updateDisplay() {
+            if (elCookies) elCookies.innerText = Math.floor(cookies).toLocaleString();
+            if (elCps) elCps.innerText = cps.toFixed(1);
+            items.forEach(item => {
+                const elCost = document.getElementById(`cost-${item.id}`);
+                const elCount = document.getElementById(`count-${item.id}`);
+                const elBtn = document.getElementById(`btn-${item.id}`);
+                if (elCost) elCost.innerText = Math.floor(item.cost).toLocaleString();
+                if (elCount) elCount.innerText = item.count;
+                if (elBtn) elBtn.disabled = cookies < item.cost;
+            });
+            checkAchievements();
+        }
+
+            checkAchievements();
+        }
+
+            function checkAchievements() {
+            achievements.forEach(ach => {
+                if (!ach.done && totalCookiesEarned >= ach.threshold) {
+                    ach.done = true;
+                    if (elAnnText) elAnnText.innerText = ach.text;
+                    if (elLog) elLog.innerHTML = `<span style="color:#dfb387; font-weight:bold;">${ach.text}</span><br>` + elLog.innerHTML;
+                    showCenterMessage(ach.text, 3000);
+                }
+            });
+        }
+
+        function updateNews() {
+            let newsList = [
+                "「クッキーの香りが街中に漂っています」",
+                "あなたの焼いたクッキーが美味しいとネットで話題に。",
+                "【経済ニュース】クッキーの価値が世界中で急上昇中。"
+            ];
+            if (elNews) elNews.innerText = newsList[Math.floor(Math.random() * newsList.length)];
+        }
+
+        // ==========================================
+        // 可変式のタイマー管理
+        // ==========================================
+        let gameSpeed = 1; 
+        let productionIntervalId = null;
+        let newsIntervalId = null;
+
+        function startIntervals() {
+            clearInterval(productionIntervalId);
+            clearInterval(newsIntervalId);
+
+            // 1. 自動生産タイマー
+            productionIntervalId = setInterval(() => { 
+                if (cps > 0) { 
+                    cookies += (cps / 10); 
+                    totalCookiesEarned += (cps / 10); 
+                    updateDisplay(); 
+                } 
+            }, 100 / gameSpeed);
+
+            // 2. ニュース更新タイマー
+            newsIntervalId = setInterval(updateNews, 10000 / gameSpeed);
+        }
+
+        function showCenterMessage(text, duration = 5000) {
+            if (!elCenterMsg) return;
+            elCenterMsg.innerText = text;
+            elCenterMsg.classList.add('show');
+            if (window.centerMsgTimeout) clearTimeout(window.centerMsgTimeout);
+            window.centerMsgTimeout = setTimeout(() => {
+                elCenterMsg.classList.remove('show');
+            }, duration);
+        }
+
+        // クリックイベント
+        if (elCookieBtn) {
+            elCookieBtn.addEventListener('click', (e) => {
+                cookies += clickPower; totalCookiesEarned += clickPower;
+                updateDisplay();
+                
+                let particle = document.createElement('div');
+                particle.className = 'cookie-particle'; particle.innerText = '🍪';
+                particle.style.left = (e.clientX - 12) + 'px'; particle.style.top = (e.clientY - 12) + 'px';
+                particle.style.setProperty('--x', (Math.random() * 200 - 100) + 'px');
+                particle.style.setProperty('--y', (Math.random() * -150 - 50) + 'px');
+                particle.style.setProperty('--r', (Math.random() * 360) + 'deg');
+                document.body.appendChild(particle);
+                setTimeout(() => particle.remove(), 800);
+            });
+        }
+
+        // 施設購入イベント
+        items.forEach(item => {
+            const btn = document.getElementById(`btn-${item.id}`);
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    if (cookies >= item.cost) {
+                        cookies -= item.cost; item.count++;
+                        item.cost = Math.floor(item.baseCost * Math.pow(1.15, item.count));
+                        cps = items.reduce((sum, i) => sum + (i.count * i.cps), 0);
+                        if (elLog) elLog.innerHTML = `🛒 ${item.count}つ目の【${btn.querySelector('.item-name').innerText}】を購入しました。<br>` + elLog.innerHTML;
+                        updateDisplay();
+                    }
+                });
+            }
+        });
+
+        // 管理者パネルを開閉する処理
+        if (elAdminTriggerBtn && elAdminPanel) {
+            elAdminTriggerBtn.addEventListener('click', () => {
+                if (elAdminPanel.style.display === 'block') {
+                    elAdminPanel.style.display = 'none';
+                    if (elInputArea) elInputArea.style.display = "block";
+                    if (elCheatMenu) elCheatMenu.style.display = "none";
+                } else {
+                    elAdminPanel.style.display = 'block'; 
+                    if (elCodeInput) elCodeInput.focus();
+                }
+            });
+        }
+
+        if (elCodeBtn) elCodeBtn.addEventListener('click', executeCode);
+        if (elCodeInput) elCodeInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') executeCode(); });
+
+        // コードを実行した時の処理
+        function executeCode() {
+            if (!elCodeInput || !elAnnText) return;
+            const code = elCodeInput.value.trim(); elCodeInput.value = "";
+            
+            if (code === "0409") {
+                elAnnText.innerText = "🔓【最高管理者モード】ゲーム内の数値を変更できます。";
+                if (inCookies) inCookies.value = Math.floor(cookies); 
+                if (inPower) inPower.value = clickPower;
+                
+                const selectSpeed = document.getElementById('set-speed');
+                if (selectSpeed) selectSpeed.value = gameSpeed;
+                
+                if (!document.getElementById('set-message') && elCheatMenu && elApplyBtn) {
+                    const label = document.createElement('label');
+                    label.innerText = "画面中央に出すメッセージ：";
+                    const input = document.createElement('input');
+                    input.type = "text"; input.id = "set-message"; input.placeholder = "例: 管理者イベント発生！";
+                    elCheatMenu.insertBefore(label, elApplyBtn);
+                    elCheatMenu.insertBefore(input, elApplyBtn);
+                }
+
+                if (elInputArea) elInputArea.style.display = "none"; 
+                if (elCheatMenu) elCheatMenu.style.display = "block";
+                
+            } else if (code === "reset") {
+                cookies = 0; totalCookiesEarned = 0; clickPower = 1; cps = 0; gameSpeed = 1;
+                items.forEach(i => { i.count = 0; i.cost = i.baseCost; });
+                achievements.forEach(a => a.done = false);
+                
+                localStorage.removeItem('cookie_clicker_save');
+                startIntervals(); 
+                
+                if (elLog) elLog.innerHTML = "🧹 管理者コマンド：ゲームをリセットしました。<br>" + elLog.innerHTML;
+                if (elAdminPanel) elAdminPanel.style.display = 'none'; 
+                if (elInputArea) elInputArea.style.display = "block"; 
+                if (elCheatMenu) elCheatMenu.style.display = "none";
+                showCenterMessage("🧹 システム初期化完了", 3000);
+            } else { 
+                elAnnText.innerText = "❌ 無効なコードです。"; 
+            }
+            updateDisplay();
+        }
+
+        // 「選択した施設を増やす」ボタンの処理
+        const btnAddItem = document.getElementById('btn-add-item');
+        if (btnAddItem) {
+            btnAddItem.addEventListener('click', () => {
+                const inputId = document.getElementById('add-item-id');
+                const inputCount = document.getElementById('add-item-count');
+                if (!inputId || !inputCount) return;
+                
+                const id = parseInt(inputId.value);
+                const countToAdd = parseInt(inputCount.value);
+
+                if (isNaN(id) || id < 0 || id >= items.length || isNaN(countToAdd) || countToAdd <= 0) {
+                    alert("正しい施設ID(0〜7)と、1以上の個数を入力してください。");
+                    return;
+                }
+
+                const targetItem = items.find(i => i.id === id);
+                if (targetItem) {
+                    targetItem.count += countToAdd;
+                    targetItem.cost = Math.floor(targetItem.baseCost * Math.pow(1.15, targetItem.count));
+                    cps = items.reduce((sum, i) => sum + (i.count * i.cps), 0);
+                    
+                    const btn = document.getElementById(`btn-${id}`);
+                    const name = btn ? btn.querySelector('.item-name').innerText : `施設ID:${id}`;
+                    if (elLog) elLog.innerHTML = `🛠️ 管理者権限：【${name}】を ${countToAdd} 個強制追加しました。<br>` + elLog.innerHTML;
+                    
+                    inputId.value = "";
+                    inputCount.value = "";
+                    updateDisplay();
+                }
+            });
+        }
+
+        // 「設定を反映」ボタンの処理
+        if (elApplyBtn) {
+            elApplyBtn.addEventListener('click', () => {
+                if (inCookies && inCookies.value !== "") { cookies = Number(inCookies.value); totalCookiesEarned = cookies; }
+                if (inPower && inPower.value !== "") clickPower = Number(inPower.value);
+                if (inAllCost && inAllCost.value !== "") { items.forEach(i => { i.cost = Number(inAllCost.value); }); }
+                
+                const selectSpeed = document.getElementById('set-speed');
+                if (selectSpeed) {
+                    gameSpeed = Number(selectSpeed.value);
+                    startIntervals();
+                }
+
+                const inMsg = document.getElementById('set-message');
+                if (inMsg && inMsg.value !== "") {
+                    showCenterMessage(inMsg.value, 5000);
+                } else {
+                    showCenterMessage("⚙️ 管理者権限によって世界が書き換えられました", 5000);
+                }
+
+                if (elAnnText) elAnnText.innerText = `⚙️ 管理者設定：数値を反映しました。（タップパワー: ${clickPower} / 速度: ${gameSpeed}倍）`;
+                if (elAdminPanel) elAdminPanel.style.display = 'none'; 
+                
+                if (elInputArea) elInputArea.style.display = "block"; 
+                if (elCheatMenu) elCheatMenu.style.display = "none";
+                updateDisplay();
+            });
+        }
+
+        // ==========================================
+        // ゲーム起動時の初期処理
+        // ==========================================
+        loadGame();
+        updateDisplay();
+        startIntervals(); 
+
+        // 10秒ごとに自動セーブ
+        setInterval(saveGame, 10000);
+
+        window.addEventListener('beforeunload', saveGame);
+    </script>
+
+
+</body>
+</html>
+
